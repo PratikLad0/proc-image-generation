@@ -72,11 +72,13 @@ export default function UploadSection({ sessionId, onUpload, onSessionUpdate }) 
     }
   };
 
-  const autoAssignTags = async (uploadedFiles) => {
+  const autoAssignTags = async (newFiles) => {
     try {
-      const assignments = uploadedFiles.map((filename, index) => ({
+      // Get current image count from state to continue numbering from where we left off
+      const existingImageCount = uploadedFiles.length;
+      const assignments = newFiles.map((filename, index) => ({
         filename: filename,
-        tag: `Image${index + 1}`
+        tag: `Image${existingImageCount + index + 1}`
       }));
 
       const response = await fetch(`http://127.0.0.1:5000/session/${sessionId}/tags/batch/`, {
@@ -161,7 +163,7 @@ export default function UploadSection({ sessionId, onUpload, onSessionUpdate }) 
           
           {files.length > 0 && (
             <div className="text-sm text-gray-300">
-              📋 Will auto-tag as: {files.map((_, index) => `Image${index + 1}`).join(", ")}
+              📋 Will auto-tag as: {files.map((_, index) => `Image${uploadedFiles.length + index + 1}`).join(", ")}
             </div>
           )}
         </div>

@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 
-function PreviewSection({ image, gif }) {
+function PreviewSection({ image, gif, sessionId }) {
   const [downloading, setDownloading] = useState(false);
 
   const handleDownload = async (filePath, filename) => {
@@ -22,6 +22,35 @@ function PreviewSection({ image, gif }) {
       }
     } catch (error) {
       console.error('Download error:', error);
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const handleDownloadZip = async () => {
+    setDownloading(true);
+    try {
+      const response = await fetch(`http://127.0.0.1:5000/session/${sessionId}/zip/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ include_outputs: true, include_uploads: false }),
+      });
+
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `session_${sessionId}_${Date.now()}.zip`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      } else {
+        console.error('ZIP download failed');
+      }
+    } catch (error) {
+      console.error('ZIP download error:', error);
     } finally {
       setDownloading(false);
     }
@@ -120,7 +149,19 @@ function PreviewSection({ image, gif }) {
                 📥 Download GIF
               </button>
             )}
+            {sessionId && (
+              <button
+                onClick={handleDownloadZip}
+                disabled={downloading}
+                className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded text-sm disabled:bg-gray-400"
+              >
+                📦 Download All as ZIP
+              </button>
+            )}
           </div>
+          <p className="text-xs text-gray-500 mt-2">
+            💡 Tip: Use "Download All as ZIP" to get all generated outputs in a single file
+          </p>
         </div>
       )}
     </div>

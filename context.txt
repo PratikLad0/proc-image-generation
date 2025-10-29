@@ -1,0 +1,5 @@
+i want to create a project which uses LLm to correct the image with layout such that the image generated is working with promotional requirements of customer
+Previous tagging of image was good but it only for Uploading Image but it dosn't count image uploaded so auto tagging should count image uploaded as well
+like I want to create Image with size 1024X1920 with background with color and then defined Images with tags with position then it should show propely
+Also when user ask to do somethng do it like When asked add Text to Image or Zip it should add text and when not asked don't add it currently its working with text in gif but not in image
+Text can be anything "Hello World", also if asked change it to language specified by user like if asked in hindi change it to hindi and if asked in english change it to english

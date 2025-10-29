@@ -8,6 +8,7 @@ import shutil
 from PIL import Image
 import re
 from datetime import datetime
+import zipfile
 
 # Initialize app
 app = FastAPI(title="Proc Image Generator API")
@@ -503,6 +504,48 @@ async def transcribe_voice(audio_file: UploadFile = File(...)):
             "message": f"Voice transcription failed: {str(e)}",
             "transcript": ""
         }
+
+
+@app.post("/session/{session_id}/zip/")
+async def create_zip_archive(session_id: str, payload: dict):
+    """Create a ZIP archive of generated images or all session files"""
+    session = SessionManager.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    include_outputs = payload.get("include_outputs", True)
+    include_uploads = payload.get("include_uploads", False)
+    
+    try:
+        # Create ZIP file
+        zip_filename = f"session_{session_id}_{uuid.uuid4()}.zip"
+        zip_path = os.path.join(TEMP_DIR, zip_filename)
+        
+        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            # Add output files
+            if include_outputs and os.path.exists(session["output_dir"]):
+                for filename in os.listdir(session["output_dir"]):
+                    file_path = os.path.join(session["output_dir"], filename)
+                    if os.path.isfile(file_path):
+                        zipf.write(file_path, f"outputs/{filename}")
+            
+            # Add upload files
+            if include_uploads and os.path.exists(session["upload_dir"]):
+                for filename in os.listdir(session["upload_dir"]):
+                    file_path = os.path.join(session["upload_dir"], filename)
+                    if os.path.isfile(file_path):
+                        zipf.write(file_path, f"uploads/{filename}")
+        
+        # Return the ZIP file
+        return FileResponse(
+            zip_path,
+            media_type="application/zip",
+            filename=f"session_{session_id}.zip",
+            headers={"Content-Disposition": f"attachment; filename=session_{session_id}.zip"}
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create ZIP: {str(e)}")
 
 
 @app.on_event("startup")

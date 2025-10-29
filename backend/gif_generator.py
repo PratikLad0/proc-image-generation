@@ -184,7 +184,7 @@ def create_presentation_gif(image_paths: dict, prompt: str, output_path: str, du
                 
                 # Add text overlay only if requested in prompt
                 if should_add_text_overlay(prompt):
-                    add_text_overlay_to_frame(canvas, tag, canvas_size)
+                    add_text_overlay_to_frame(canvas, tag, canvas_size, prompt)
                 
                 frames.append(canvas)
                 
@@ -196,7 +196,7 @@ def create_presentation_gif(image_paths: dict, prompt: str, output_path: str, du
     if frames:
         blank_frame = Image.new("RGB", canvas_size, color=(0, 0, 0))
         if should_add_text_overlay(prompt):
-            add_text_overlay_to_frame(blank_frame, "End", canvas_size)
+            add_text_overlay_to_frame(blank_frame, "End", canvas_size, prompt)
         frames.append(blank_frame)
     
     # Save as animated GIF
@@ -262,24 +262,72 @@ def resize_for_presentation(img: Image.Image, canvas_size: tuple) -> Image.Image
     return img.resize((new_width, new_height), Image.Resampling.LANCZOS)
 
 
-def add_text_overlay_to_frame(canvas: Image.Image, text: str, canvas_size: tuple):
+def extract_text_content_from_prompt(prompt: str) -> str:
+    """Extract custom text content from prompt"""
+    import re
+    
+    # Look for quoted text
+    quoted_pattern = r'["\']([^"\']+)["\']'
+    match = re.search(quoted_pattern, prompt)
+    if match:
+        return match.group(1)
+    
+    # Look for "text: <content>" pattern
+    text_pattern = r'text[:\s]+([^,\.]+)'
+    match = re.search(text_pattern, prompt.lower())
+    if match:
+        # Get the original case text
+        start_pos = match.start(1)
+        text_content = prompt[start_pos:match.end(1)].strip()
+        return text_content
+    
+    # Return None if no specific text found
+    return None
+
+
+def add_text_overlay_to_frame(canvas: Image.Image, text: str, canvas_size: tuple, prompt: str = ""):
     """Add text overlay to a frame"""
     from PIL import ImageDraw, ImageFont
     
+    # Check if we should use custom text from prompt
+    custom_text = extract_text_content_from_prompt(prompt) if prompt else None
+    if custom_text:
+        text = custom_text
+    
+    # Detect language
+    language = "english"
+    if prompt:
+        prompt_lower = prompt.lower()
+        if "hindi" in prompt_lower or "हिंदी" in prompt:
+            language = "hindi"
+    
     draw = ImageDraw.Draw(canvas)
     
-    # Try to use a larger font
+    # Try to use a larger font based on language
     try:
-        # Try to load a system font
-        font = ImageFont.truetype("arial.ttf", 48)
-    except:
-        try:
-            font = ImageFont.truetype("/System/Library/Fonts/Arial.ttf", 48)
-        except:
+        if language == "hindi":
+            # Try to load a font that supports Devanagari script
             try:
-                font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 48)
+                font = ImageFont.truetype("NotoSansDevanagari-Regular.ttf", 48)
             except:
-                font = ImageFont.load_default()
+                try:
+                    font = ImageFont.truetype("/usr/share/fonts/truetype/noto/NotoSansDevanagari-Regular.ttf", 48)
+                except:
+                    font = ImageFont.load_default()
+        else:
+            # Try to load a system font
+            try:
+                font = ImageFont.truetype("arial.ttf", 48)
+            except:
+                try:
+                    font = ImageFont.truetype("/System/Library/Fonts/Arial.ttf", 48)
+                except:
+                    try:
+                        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 48)
+                    except:
+                        font = ImageFont.load_default()
+    except:
+        font = ImageFont.load_default()
     
     # Calculate text position (bottom center)
     text_bbox = draw.textbbox((0, 0), text, font=font)
@@ -289,15 +337,27 @@ def add_text_overlay_to_frame(canvas: Image.Image, text: str, canvas_size: tuple
     x = (canvas_size[0] - text_width) // 2
     y = canvas_size[1] - text_height - 30  # 30px from bottom
     
-    # Add text with white color and black outline for better visibility
+    # Extract text color from prompt
+    text_color = (255, 255, 255)  # Default white for GIFs
+    if prompt:
+        prompt_lower = prompt.lower()
+        if "black text" in prompt_lower:
+            text_color = (0, 0, 0)
+        elif "red text" in prompt_lower:
+            text_color = (255, 0, 0)
+        elif "blue text" in prompt_lower:
+            text_color = (0, 0, 255)
+    
+    # Add text with outline for better visibility
     # Draw outline
+    outline_color = (0, 0, 0) if text_color == (255, 255, 255) else (255, 255, 255)
     for adj_x in [-2, -1, 0, 1, 2]:
         for adj_y in [-2, -1, 0, 1, 2]:
             if adj_x != 0 or adj_y != 0:
-                draw.text((x + adj_x, y + adj_y), text, fill=(0, 0, 0), font=font)
+                draw.text((x + adj_x, y + adj_y), text, fill=outline_color, font=font)
     
     # Draw main text
-    draw.text((x, y), text, fill=(255, 255, 255), font=font)
+    draw.text((x, y), text, fill=text_color, font=font)
 
 
 def parse_animation_instructions(prompt: str) -> dict:

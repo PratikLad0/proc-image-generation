@@ -106,7 +106,8 @@ function App() {
             />
             <PreviewSection 
               image={outputImage} 
-              gif={outputGif} 
+              gif={outputGif}
+              sessionId={sessionId}
             />
           </>
         )}

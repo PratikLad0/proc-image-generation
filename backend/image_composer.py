@@ -2,6 +2,60 @@ from PIL import Image, ImageDraw, ImageFont
 import re
 import os
 
+def extract_background_color_from_prompt(prompt: str) -> tuple:
+    """Extract background color from prompt, returns RGB tuple"""
+    prompt_lower = prompt.lower()
+    
+    # Common color mappings
+    color_map = {
+        'white': (255, 255, 255),
+        'black': (0, 0, 0),
+        'red': (255, 0, 0),
+        'green': (0, 255, 0),
+        'blue': (0, 0, 255),
+        'yellow': (255, 255, 0),
+        'cyan': (0, 255, 255),
+        'magenta': (255, 0, 255),
+        'gray': (128, 128, 128),
+        'grey': (128, 128, 128),
+        'orange': (255, 165, 0),
+        'purple': (128, 0, 128),
+        'pink': (255, 192, 203),
+        'brown': (165, 42, 42),
+        'lightblue': (173, 216, 230),
+        'darkblue': (0, 0, 139),
+        'lightgreen': (144, 238, 144),
+        'darkgreen': (0, 100, 0),
+    }
+    
+    # Look for color keywords in prompt
+    for color_name, rgb in color_map.items():
+        if f'{color_name} background' in prompt_lower or f'background {color_name}' in prompt_lower or f'{color_name} color' in prompt_lower:
+            return rgb
+    
+    # Look for RGB values in prompt (e.g., "rgb(255, 0, 0)" or "color 255 0 0")
+    import re
+    rgb_pattern = r'rgb\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)'
+    match = re.search(rgb_pattern, prompt_lower)
+    if match:
+        r, g, b = int(match.group(1)), int(match.group(2)), int(match.group(3))
+        if 0 <= r <= 255 and 0 <= g <= 255 and 0 <= b <= 255:
+            return (r, g, b)
+    
+    # Look for hex color values (e.g., "#FF0000" or "color #FF0000")
+    hex_pattern = r'#([0-9a-f]{6})'
+    match = re.search(hex_pattern, prompt_lower)
+    if match:
+        hex_color = match.group(1)
+        r = int(hex_color[0:2], 16)
+        g = int(hex_color[2:4], 16)
+        b = int(hex_color[4:6], 16)
+        return (r, g, b)
+    
+    # Default to white
+    return (255, 255, 255)
+
+
 def extract_canvas_size_from_prompt(prompt: str) -> tuple:
     """Extract custom width and height from prompt"""
     # Look for various dimension patterns
@@ -60,8 +114,11 @@ def compose_image_with_tags(image_paths: dict, prompt: str, output_path: str, si
     if size is None:
         size = extract_canvas_size_from_prompt(prompt)
     
+    # Extract background color from prompt
+    bg_color = extract_background_color_from_prompt(prompt)
+    
     # Create base canvas
-    canvas = Image.new("RGB", size, color=(255, 255, 255))
+    canvas = Image.new("RGB", size, color=bg_color)
     
     # Parse prompt for positioning instructions
     positioning = parse_positioning_instructions(prompt)
@@ -196,23 +253,109 @@ def calculate_position(img_size: tuple, position: dict, canvas_size: tuple) -> t
         return (x, y)
 
 
+def extract_text_from_prompt(prompt: str) -> tuple:
+    """Extract text content and language from prompt"""
+    prompt_lower = prompt.lower()
+    
+    # Check if text should be added
+    if not any(keyword in prompt_lower for keyword in ["add text", "with text", "text", "write"]):
+        return None, None
+    
+    # Extract text content
+    # Look for quoted text
+    import re
+    quoted_pattern = r'["\']([^"\']+)["\']'
+    match = re.search(quoted_pattern, prompt)
+    if match:
+        text_content = match.group(1)
+    else:
+        # Look for "text: <content>" pattern
+        text_pattern = r'text[:\s]+([^,\.]+)'
+        match = re.search(text_pattern, prompt_lower)
+        if match:
+            text_content = prompt[match.start(1):match.end(1)].strip()
+        else:
+            text_content = "Generated Image"
+    
+    # Detect language
+    language = "english"
+    if "hindi" in prompt_lower or "हिंदी" in prompt:
+        language = "hindi"
+    elif "spanish" in prompt_lower:
+        language = "spanish"
+    elif "french" in prompt_lower:
+        language = "french"
+    
+    return text_content, language
+
+
 def add_text_overlay(canvas: Image.Image, prompt: str, size: tuple):
     """Add text overlay to canvas if specified in prompt"""
-    # Simple text overlay - can be enhanced later
-    if "text" in prompt.lower() or "title" in prompt.lower():
-        draw = ImageDraw.Draw(canvas)
-        try:
-            # Try to use a default font, fallback to basic if not available
-            font = ImageFont.load_default()
-        except:
-            font = None
-        
-        text = "Generated Image"
-        text_bbox = draw.textbbox((0, 0), text, font=font)
-        text_width = text_bbox[2] - text_bbox[0]
-        text_height = text_bbox[3] - text_bbox[1]
-        
-        x = (size[0] - text_width) // 2
-        y = size[1] - text_height - 20
-        
-        draw.text((x, y), text, fill=(0, 0, 0), font=font)
+    # Extract text content and language
+    text_content, language = extract_text_from_prompt(prompt)
+    
+    # Only add text if explicitly requested
+    if text_content is None:
+        return
+    
+    draw = ImageDraw.Draw(canvas)
+    
+    # Try to load appropriate font based on language
+    font = None
+    try:
+        if language == "hindi":
+            # Try to load a font that supports Devanagari script
+            try:
+                font = ImageFont.truetype("NotoSansDevanagari-Regular.ttf", 48)
+            except:
+                try:
+                    font = ImageFont.truetype("/usr/share/fonts/truetype/noto/NotoSansDevanagari-Regular.ttf", 48)
+                except:
+                    font = ImageFont.load_default()
+        else:
+            # Try to load a standard font
+            try:
+                font = ImageFont.truetype("arial.ttf", 48)
+            except:
+                try:
+                    font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 48)
+                except:
+                    font = ImageFont.load_default()
+    except:
+        font = ImageFont.load_default()
+    
+    # Calculate text position
+    text_bbox = draw.textbbox((0, 0), text_content, font=font)
+    text_width = text_bbox[2] - text_bbox[0]
+    text_height = text_bbox[3] - text_bbox[1]
+    
+    # Extract text position from prompt (default to bottom center)
+    x = (size[0] - text_width) // 2
+    y = size[1] - text_height - 30
+    
+    if "top" in prompt.lower() and "text" in prompt.lower():
+        y = 30
+    elif "center" in prompt.lower() and "text" in prompt.lower():
+        y = (size[1] - text_height) // 2
+    
+    # Extract text color from prompt
+    text_color = (0, 0, 0)  # Default black
+    if "white text" in prompt.lower():
+        text_color = (255, 255, 255)
+    elif "black text" in prompt.lower():
+        text_color = (0, 0, 0)
+    elif "red text" in prompt.lower():
+        text_color = (255, 0, 0)
+    elif "blue text" in prompt.lower():
+        text_color = (0, 0, 255)
+    
+    # Add text with outline for better visibility
+    # Draw outline
+    for adj_x in [-2, -1, 0, 1, 2]:
+        for adj_y in [-2, -1, 0, 1, 2]:
+            if adj_x != 0 or adj_y != 0:
+                outline_color = (255, 255, 255) if text_color == (0, 0, 0) else (0, 0, 0)
+                draw.text((x + adj_x, y + adj_y), text_content, fill=outline_color, font=font)
+    
+    # Draw main text
+    draw.text((x, y), text_content, fill=text_color, font=font)
